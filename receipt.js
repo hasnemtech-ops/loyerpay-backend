@@ -3,6 +3,12 @@ const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
 const fs = require('fs');
 const path = require('path');
 
+// Formate un montant en FCFA avec espace normal comme séparateur de milliers
+// (toLocaleString('fr-FR') utilise un espace insécable fin U+202F que la police PDF standard ne sait pas encoder)
+function formatMontant(n) {
+  return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+}
+
 async function genererRecu({ gestionnaire, locataire, paiement, outputDir }) {
   const pdfDoc = await PDFDocument.create();
   const page = pdfDoc.addPage([595, 400]); // A5 paysage-ish, compact
@@ -10,8 +16,9 @@ async function genererRecu({ gestionnaire, locataire, paiement, outputDir }) {
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
   let y = 360;
+  const sanitize = (s) => String(s).replace(/[\u202F\u00A0\u2009\u2007]/g, ' '); // remplace les espaces spéciaux par un espace normal
   const draw = (text, opts = {}) => {
-    page.drawText(text, { x: opts.x ?? 40, y, size: opts.size ?? 11, font: opts.bold ? fontBold : font, color: rgb(0, 0, 0) });
+    page.drawText(sanitize(text), { x: opts.x ?? 40, y, size: opts.size ?? 11, font: opts.bold ? fontBold : font, color: rgb(0, 0, 0) });
     y -= opts.gap ?? 20;
   };
 
@@ -20,7 +27,7 @@ async function genererRecu({ gestionnaire, locataire, paiement, outputDir }) {
   draw(`Locataire : ${locataire.nom}`);
   draw(`Téléphone : ${locataire.telephone}`);
   draw(`Mois concerné : ${paiement.mois_concerne}`);
-  draw(`Montant : ${paiement.montant.toLocaleString('fr-FR')} FCFA`, { bold: true });
+  draw(`Montant : ${formatMontant(paiement.montant)} FCFA`, { bold: true });
   draw(`Moyen de paiement : ${paiement.moyen_paiement || 'Mobile Money'}`);
   const reference = paiement.reference_saisie || paiement.fedapay_reference || paiement.fedapay_transaction_id || '-';
   draw(`Référence de transaction : ${reference}`);

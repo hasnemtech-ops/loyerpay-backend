@@ -203,6 +203,25 @@ app.post('/api/webhook/fedapay', async (req, res) => {
   res.json({ ok: true });
 });
 
+// Régénère le reçu d'un paiement déjà confirmé (rattrapage si la génération avait échoué)
+app.post('/api/paiements/:id/regenerer-recu', requireAuth, async (req, res) => {
+  try {
+    const paiement = db.prepare('SELECT * FROM paiements WHERE id = ? AND gestionnaire_id = ?')
+      .get(req.params.id, req.gestionnaire.id);
+    if (!paiement) return res.status(404).json({ error: 'paiement_introuvable' });
+    if (paiement.statut !== 'confirme') return res.status(400).json({ error: 'paiement_non_confirme' });
+
+    const locataire = db.prepare('SELECT * FROM locataires WHERE id = ?').get(paiement.locataire_id);
+    const recuPath = await genererRecu({ gestionnaire: req.gestionnaire, locataire, paiement, outputDir: RECUS_DIR });
+    db.prepare('UPDATE paiements SET recu_path = ? WHERE id = ?').run(recuPath, req.params.id);
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'erreur_regeneration' });
+  }
+});
+
 // Téléchargement du reçu
 app.get('/api/paiements/:id/recu', requireAuth, (req, res) => {
   const paiement = db.prepare('SELECT * FROM paiements WHERE id = ? AND gestionnaire_id = ?')
