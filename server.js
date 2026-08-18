@@ -19,6 +19,14 @@ app.use(cors());
 app.use(express.json({
   verify: (req, res, buf) => { req.rawBody = buf; }
 }));
+app.use('/admin', express.static(path.join(__dirname, 'public/admin')));
+
+const requireAdmin = (req, res, next) => {
+  const password = req.headers['x-admin-password'];
+  if (!process.env.ADMIN_PASSWORD) return res.status(500).json({ error: 'admin_non_configure' });
+  if (password !== process.env.ADMIN_PASSWORD) return res.status(401).json({ error: 'mot_de_passe_incorrect' });
+  next();
+};
 
 const requireAuth = async (req, res, next) => {
   try {
@@ -35,6 +43,66 @@ const requireAuth = async (req, res, next) => {
     res.status(500).json({ error: 'erreur_auth' });
   }
 };
+
+// ---------- ADMIN (panneau protégé par mot de passe) ----------
+app.post('/api/admin/gestionnaires', requireAdmin, async (req, res) => {
+  try {
+    const { nom, telephone, email, deviceId, quotaLocataires, dureeJours } = req.body;
+    if (!nom || !deviceId || !quotaLocataires || !dureeJours) {
+      return res.status(400).json({ error: 'champs_manquants' });
+    }
+    const expiry = new Date(Date.now() + dureeJours * 86400000).toISOString().slice(0, 10);
+    const licenseCode = generateLicense(deviceId, quotaLocataires, expiry);
+
+    const id = uuid();
+    await db.run(
+      `INSERT INTO gestionnaires (id, nom, telephone, email, device_id, license_code, license_expiry, quota_locataires)
+       VALUES (?,?,?,?,?,?,?,?)`,
+      [id, nom, telephone || null, email || null, deviceId, licenseCode, new Date(expiry).toISOString(), quotaLocataires]
+    );
+    res.json({ id, licenseCode, expiry });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'erreur_creation' });
+  }
+});
+
+app.get('/api/admin/gestionnaires', requireAdmin, async (req, res) => {
+  try {
+    const rows = await db.all('SELECT * FROM gestionnaires ORDER BY created_at DESC');
+    // Ajoute le nombre de locataires et le statut d'expiration pour chaque gestionnaire
+    const enrichis = await Promise.all(rows.map(async (g) => {
+      const nbLocatairesRow = await db.get('SELECT COUNT(*) as c FROM locataires WHERE gestionnaire_id = ? AND actif = 1', [g.id]);
+      const expire = new Date(g.license_expiry) < new Date();
+      return { ...g, nb_locataires: nbLocatairesRow.c, expire };
+    }));
+    res.json(enrichis);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'erreur_lecture' });
+  }
+});
+
+app.post('/api/admin/gestionnaires/:id/renouveler', requireAdmin, async (req, res) => {
+  try {
+    const { dureeJours, quotaLocataires } = req.body;
+    const g = await db.get('SELECT * FROM gestionnaires WHERE id = ?', [req.params.id]);
+    if (!g) return res.status(404).json({ error: 'gestionnaire_introuvable' });
+
+    const quota = quotaLocataires || g.quota_locataires;
+    const expiry = new Date(Date.now() + (dureeJours || 365) * 86400000).toISOString().slice(0, 10);
+    const licenseCode = generateLicense(g.device_id, quota, expiry);
+
+    await db.run(
+      'UPDATE gestionnaires SET license_code = ?, license_expiry = ?, quota_locataires = ? WHERE id = ?',
+      [licenseCode, new Date(expiry).toISOString(), quota, req.params.id]
+    );
+    res.json({ licenseCode, expiry, quota });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'erreur_renouvellement' });
+  }
+});
 
 // ---------- LICENCE ----------
 app.post('/api/license/generate', (req, res) => {

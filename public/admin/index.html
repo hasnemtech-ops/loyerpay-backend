@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>LoyerPay Admin — hasnemtech</title>
+<style>
+  :root { --primary:#1a5f3f; --bg:#f4f6f5; --card:#fff; --border:#e0e0e0; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: 'Segoe UI', Arial, sans-serif; background:var(--bg); }
+  header { background:var(--primary); color:#fff; padding:16px 24px; }
+  header h1 { margin:0; font-size:18px; }
+  main { max-width:960px; margin:24px auto; padding:0 16px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:20px; margin-bottom:20px; }
+  input, select { padding:9px; border:1px solid var(--border); border-radius:4px; margin:4px 6px 4px 0; }
+  button { background:var(--primary); color:#fff; border:none; padding:9px 16px; border-radius:4px; cursor:pointer; }
+  table { width:100%; border-collapse:collapse; margin-top:10px; }
+  th, td { text-align:left; padding:8px; border-bottom:1px solid var(--border); font-size:13px; }
+  .badge { padding:2px 8px; border-radius:10px; font-size:11px; }
+  .badge.ok { background:#d4edda; color:#155724; }
+  .badge.expire { background:#f8d7da; color:#721c24; }
+  #login-screen, #app-screen { display:none; }
+  #login-screen.visible, #app-screen.visible { display:block; }
+  code { background:#f0f0f0; padding:2px 6px; border-radius:3px; font-size:12px; }
+</style>
+</head>
+<body>
+  <header><h1>LoyerPay — Panneau Admin (hasnemtech)</h1></header>
+
+  <main>
+    <div id="login-screen" class="card visible" style="max-width:360px">
+      <h3 style="margin-top:0">Connexion</h3>
+      <input type="password" id="admin-password" placeholder="Mot de passe admin" style="width:100%">
+      <button onclick="connecter()" style="width:100%;margin-top:10px">Se connecter</button>
+      <p id="login-error" style="color:#c0392b;font-size:13px"></p>
+    </div>
+
+    <div id="app-screen">
+      <div class="card">
+        <h3 style="margin-top:0">Créer un gestionnaire</h3>
+        <input id="new-nom" placeholder="Nom">
+        <input id="new-tel" placeholder="Téléphone">
+        <input id="new-email" placeholder="Email">
+        <input id="new-device" placeholder="Device ID (fourni par le client)">
+        <input id="new-quota" placeholder="Quota locataires" type="number" value="50" style="width:140px">
+        <input id="new-duree" placeholder="Durée (jours)" type="number" value="365" style="width:140px">
+        <br><button onclick="creerGestionnaire()" style="margin-top:10px">Créer + générer la licence</button>
+        <div id="new-result" style="margin-top:12px"></div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0">Gestionnaires (<span id="total-count">0</span>)</h3>
+        <table>
+          <thead><tr><th>Nom</th><th>Contact</th><th>Locataires</th><th>Licence</th><th>Action</th></tr></thead>
+          <tbody id="table-gestionnaires"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script src="admin.js"></script>
+</body>
+</html>
