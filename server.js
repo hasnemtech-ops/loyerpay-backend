@@ -258,9 +258,19 @@ app.post('/api/webhook/fedapay', async (req, res) => {
 app.get('/api/paiements/:id/recu', requireAuth, async (req, res) => {
   try {
     const paiement = await db.get('SELECT * FROM paiements WHERE id = ? AND gestionnaire_id = ?', [req.params.id, req.gestionnaire.id]);
-    if (!paiement?.recu_path || !fs.existsSync(paiement.recu_path)) {
+    if (!paiement || paiement.statut !== 'confirme') {
       return res.status(404).json({ error: 'recu_non_disponible' });
     }
+
+    // Régénère toujours à la demande : le disque Render n'est pas garanti persistant
+    // entre deux redémarrages, alors que les données du paiement (Turso) le sont.
+    if (!paiement.recu_path || !fs.existsSync(paiement.recu_path)) {
+      const locataire = await db.get('SELECT * FROM locataires WHERE id = ?', [paiement.locataire_id]);
+      const recuPath = await genererRecu({ gestionnaire: req.gestionnaire, locataire, paiement, outputDir: RECUS_DIR });
+      await db.run('UPDATE paiements SET recu_path = ? WHERE id = ?', [recuPath, req.params.id]);
+      return res.download(recuPath);
+    }
+
     res.download(paiement.recu_path);
   } catch (e) {
     console.error(e);
