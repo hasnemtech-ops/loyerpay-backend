@@ -33,15 +33,20 @@ async function genererRecu({ gestionnaire, locataire, paiement, outputDir }) {
   draw(`Référence de transaction : ${reference}`);
   draw(`Date de confirmation : ${new Date(paiement.confirmed_at).toLocaleString('fr-FR')}`, { gap: 40 });
 
-  // Insère la signature/tampon du gestionnaire si disponible (même logique que Devis Pro)
-  if (gestionnaire.signature_path && fs.existsSync(gestionnaire.signature_path)) {
-    const sigBytes = fs.readFileSync(gestionnaire.signature_path);
-    const ext = path.extname(gestionnaire.signature_path).toLowerCase();
-    const sigImage = ext === '.jpg' || ext === '.jpeg'
-      ? await pdfDoc.embedJpg(sigBytes)
-      : await pdfDoc.embedPng(sigBytes);
-    const sigDims = sigImage.scaleToFit(120, 60);
-    page.drawImage(sigImage, { x: 420, y: 40, width: sigDims.width, height: sigDims.height });
+  // Insère la signature/tampon du gestionnaire si disponible (stocké en base64 dans Turso, persistant)
+  if (gestionnaire.signature_data) {
+    try {
+      const match = gestionnaire.signature_data.match(/^data:image\/(png|jpe?g);base64,(.+)$/);
+      if (match) {
+        const [, format, base64] = match;
+        const sigBytes = Buffer.from(base64, 'base64');
+        const sigImage = format === 'png' ? await pdfDoc.embedPng(sigBytes) : await pdfDoc.embedJpg(sigBytes);
+        const sigDims = sigImage.scaleToFit(120, 60);
+        page.drawImage(sigImage, { x: 420, y: 40, width: sigDims.width, height: sigDims.height });
+      }
+    } catch (e) {
+      console.error('Erreur insertion signature :', e.message); // on continue sans bloquer la génération du reçu
+    }
   }
 
   draw(`Ce reçu est généré automatiquement et fait foi de paiement.`, { x: 40, size: 8, gap: 0 });

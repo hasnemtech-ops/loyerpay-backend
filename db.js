@@ -63,6 +63,12 @@ async function initSchema() {
   for (const stmt of SCHEMA) {
     await client.execute(stmt);
   }
+  // Migration : ajoute la colonne signature_data si elle n'existe pas encore (stockage base64, persistant)
+  try {
+    await client.execute('ALTER TABLE gestionnaires ADD COLUMN signature_data TEXT');
+  } catch (e) {
+    // colonne déjà présente — on ignore l'erreur
+  }
 }
 
 // Petits helpers pour garder un style proche de better-sqlite3, mais en async

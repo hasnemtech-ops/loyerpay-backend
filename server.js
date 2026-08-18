@@ -63,6 +63,21 @@ app.post('/api/gestionnaires', async (req, res) => {
   }
 });
 
+// Enregistre le tampon/signature du gestionnaire (stocké en base64 dans Turso, donc persistant)
+app.put('/api/gestionnaires/signature', requireAuth, async (req, res) => {
+  try {
+    const { signature_data } = req.body; // data URL complète, ex: "data:image/png;base64,iVBORw0..."
+    if (signature_data && !/^data:image\/(png|jpe?g);base64,/.test(signature_data)) {
+      return res.status(400).json({ error: 'format_image_invalide' });
+    }
+    await db.run('UPDATE gestionnaires SET signature_data = ? WHERE id = ?', [signature_data || null, req.gestionnaire.id]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'erreur_enregistrement_signature' });
+  }
+});
+
 app.put('/api/gestionnaires/numeros-marchand', requireAuth, async (req, res) => {
   try {
     const { numero_marchand_flooz, numero_marchand_mixx } = req.body;
@@ -262,16 +277,12 @@ app.get('/api/paiements/:id/recu', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'recu_non_disponible' });
     }
 
-    // Régénère toujours à la demande : le disque Render n'est pas garanti persistant
-    // entre deux redémarrages, alors que les données du paiement (Turso) le sont.
-    if (!paiement.recu_path || !fs.existsSync(paiement.recu_path)) {
-      const locataire = await db.get('SELECT * FROM locataires WHERE id = ?', [paiement.locataire_id]);
-      const recuPath = await genererRecu({ gestionnaire: req.gestionnaire, locataire, paiement, outputDir: RECUS_DIR });
-      await db.run('UPDATE paiements SET recu_path = ? WHERE id = ?', [recuPath, req.params.id]);
-      return res.download(recuPath);
-    }
-
-    res.download(paiement.recu_path);
+    // Régénéré à chaque téléchargement : garantit que la signature/tampon la plus récente
+    // est toujours incluse, et évite toute dépendance à un fichier stocké sur disque.
+    const locataire = await db.get('SELECT * FROM locataires WHERE id = ?', [paiement.locataire_id]);
+    const recuPath = await genererRecu({ gestionnaire: req.gestionnaire, locataire, paiement, outputDir: RECUS_DIR });
+    await db.run('UPDATE paiements SET recu_path = ? WHERE id = ?', [recuPath, req.params.id]);
+    res.download(recuPath);
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'erreur_telechargement' });
