@@ -22,7 +22,7 @@ app.use(express.json({
 
 const requireAuth = async (req, res, next) => {
   try {
-    const gestionnaireId = req.headers['x-gestionnaire-id'];
+    const gestionnaireId = req.headers['x-gestionnaire-id'] || req.query.gestionnaireId;
     if (!gestionnaireId) return res.status(401).json({ error: 'gestionnaire_id manquant' });
     const g = await db.get('SELECT * FROM gestionnaires WHERE id = ?', [gestionnaireId]);
     if (!g) return res.status(401).json({ error: 'gestionnaire introuvable' });
