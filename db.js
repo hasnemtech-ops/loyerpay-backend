@@ -69,6 +69,11 @@ async function initSchema() {
   } catch (e) {
     // colonne déjà présente — on ignore l'erreur
   }
+  try {
+    await client.execute('ALTER TABLE gestionnaires ADD COLUMN suspendu INTEGER DEFAULT 0');
+  } catch (e) {
+    // colonne déjà présente — on ignore l'erreur
+  }
 }
 
 // Petits helpers pour garder un style proche de better-sqlite3, mais en async
