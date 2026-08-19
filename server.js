@@ -34,6 +34,7 @@ const requireAuth = async (req, res, next) => {
     if (!gestionnaireId) return res.status(401).json({ error: 'gestionnaire_id manquant' });
     const g = await db.get('SELECT * FROM gestionnaires WHERE id = ?', [gestionnaireId]);
     if (!g) return res.status(401).json({ error: 'gestionnaire introuvable' });
+    if (g.suspendu) return res.status(403).json({ error: 'licence_suspendue' });
     const check = verifyLicense(g.device_id, g.license_code);
     if (!check.valid) return res.status(403).json({ error: 'licence_invalide', reason: check.reason });
     req.gestionnaire = g;
@@ -101,6 +102,17 @@ app.post('/api/admin/gestionnaires/:id/renouveler', requireAdmin, async (req, re
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'erreur_renouvellement' });
+  }
+});
+
+app.post('/api/admin/gestionnaires/:id/suspendre', requireAdmin, async (req, res) => {
+  try {
+    const { suspendu } = req.body; // true pour suspendre, false pour réactiver
+    await db.run('UPDATE gestionnaires SET suspendu = ? WHERE id = ?', [suspendu ? 1 : 0, req.params.id]);
+    res.json({ ok: true, suspendu: !!suspendu });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'erreur_suspension' });
   }
 });
 
@@ -182,6 +194,19 @@ app.post('/api/locataires', requireAuth, async (req, res) => {
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'erreur_ajout_locataire' });
+  }
+});
+
+// Supprime un locataire (désactivation logique — l'historique de paiements est conservé)
+app.delete('/api/locataires/:id', requireAuth, async (req, res) => {
+  try {
+    const locataire = await db.get('SELECT * FROM locataires WHERE id = ? AND gestionnaire_id = ?', [req.params.id, req.gestionnaire.id]);
+    if (!locataire) return res.status(404).json({ error: 'locataire_introuvable' });
+    await db.run('UPDATE locataires SET actif = 0 WHERE id = ?', [req.params.id]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'erreur_suppression' });
   }
 });
 
