@@ -57,15 +57,28 @@ async function chargerGestionnaires() {
   tbody.innerHTML = '';
   rows.forEach(g => {
     const tr = document.createElement('tr');
-    const badge = g.expire ? `<span class="badge expire">expirée</span>` : `<span class="badge ok">active</span>`;
+    let badge = g.expire ? `<span class="badge expire">expirée</span>` : `<span class="badge ok">active</span>`;
+    if (g.suspendu) badge = `<span class="badge expire">suspendue</span>`;
+    const boutonSuspension = g.suspendu
+      ? `<button onclick="suspendre('${g.id}', false)" style="background:#27ae60">Réactiver</button>`
+      : `<button onclick="suspendre('${g.id}', true)" style="background:#c0392b">Suspendre</button>`;
     tr.innerHTML = `
       <td>${g.nom}</td>
       <td>${g.telephone || '—'}<br>${g.email || ''}</td>
       <td>${g.nb_locataires} / ${g.quota_locataires}</td>
       <td>${badge}<br><span style="font-size:11px;color:#888">jusqu'au ${new Date(g.license_expiry).toLocaleDateString('fr-FR')}</span></td>
-      <td><button onclick="renouveler('${g.id}')">Renouveler 1 an</button></td>`;
+      <td><button onclick="renouveler('${g.id}')">Renouveler 1 an</button><br><br>${boutonSuspension}</td>`;
     tbody.appendChild(tr);
   });
+}
+
+async function suspendre(id, suspendu) {
+  const res = await fetch(`/api/admin/gestionnaires/${id}/suspendre`, {
+    method: 'POST', headers: adminHeaders(),
+    body: JSON.stringify({ suspendu })
+  });
+  if (!res.ok) return alert('Erreur lors de la mise à jour.');
+  chargerGestionnaires();
 }
 
 async function renouveler(id) {
