@@ -36,7 +36,7 @@ async function creerTransaction({ montant, description, locataire, callbackUrl, 
 
   // Génère le lien/token de paiement (checkout FedaPay)
   const tokenResp = await client.post(`/transactions/${transaction.id}/token`);
-  const paymentUrl = tokenResp.data['v1/token_link'].url;
+  const paymentUrl = tokenResp.data.url;
 
   return { transactionId: transaction.id, paymentUrl };
 }
