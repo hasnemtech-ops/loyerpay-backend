@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "express": "^4.19.2",
+    "fedapay": "^1.2.0",
     "@libsql/client": "^0.14.0",
     "axios": "^1.7.4",
     "pdf-lib": "^1.17.1",

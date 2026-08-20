@@ -1,6 +1,9 @@
 // fedapay.js — Création de paiement (Flooz/T-Money via FedaPay) + vérification webhook
 const axios = require('axios');
-const crypto = require('crypto');
+const { FedaPay, Webhook } = require('fedapay');
+
+FedaPay.setApiKey(process.env.FEDAPAY_SECRET_KEY);
+FedaPay.setEnvironment(process.env.FEDAPAY_ENV === 'live' ? 'live' : 'sandbox');
 
 const FEDAPAY_BASE_URL = process.env.FEDAPAY_ENV === 'live'
   ? 'https://api.fedapay.com/v1'
@@ -41,14 +44,11 @@ async function creerTransaction({ montant, description, locataire, callbackUrl, 
   return { transactionId: transaction.id, paymentUrl };
 }
 
-// Vérifie la signature du webhook FedaPay pour éviter les faux appels
-function verifierSignatureWebhook(rawBody, signatureHeader) {
-  if (!FEDAPAY_WEBHOOK_SECRET) return true; // à activer dès que le secret est configuré côté dashboard FedaPay
-  const expected = crypto
-    .createHmac('sha256', FEDAPAY_WEBHOOK_SECRET)
-    .update(rawBody)
-    .digest('hex');
-  return expected === signatureHeader;
+// Vérifie ET parse l'événement webhook via la bibliothèque officielle FedaPay
+// (gère correctement le format de signature avec timestamp, contrairement à une vérification HMAC manuelle)
+function verifierEtParserWebhook(rawBody, signatureHeader) {
+  const endpointSecret = process.env.FEDAPAY_WEBHOOK_SECRET;
+  return Webhook.constructEvent(rawBody, signatureHeader, endpointSecret);
 }
 
-module.exports = { creerTransaction, verifierSignatureWebhook };
+module.exports = { creerTransaction, verifierEtParserWebhook };

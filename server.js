@@ -8,7 +8,7 @@ const path = require('path');
 
 const db = require('./db');
 const { generateLicense, verifyLicense } = require('./license');
-const { creerTransaction, verifierSignatureWebhook } = require('./fedapay');
+const { creerTransaction, verifierEtParserWebhook } = require('./fedapay');
 const { genererRecu } = require('./receipt');
 
 const app = express();
@@ -328,21 +328,28 @@ app.post('/api/paiements/:id/regenerer-recu', requireAuth, async (req, res) => {
 
 // Webhook FedaPay
 app.post('/api/webhook/fedapay', async (req, res) => {
+  let event;
   try {
     const signature = req.headers['x-fedapay-signature'];
-    if (!verifierSignatureWebhook(req.rawBody, signature)) {
-      return res.status(401).json({ error: 'signature_invalide' });
-    }
+    event = verifierEtParserWebhook(req.rawBody, signature);
+  } catch (e) {
+    console.error('Signature webhook invalide :', e.message);
+    return res.status(400).json({ error: 'signature_invalide' });
+  }
 
-    const event = req.body;
-    if (event.name !== 'transaction.approved') return res.json({ ok: true });
+  // On répond 200 tout de suite (recommandation FedaPay), le traitement se fait juste après
+  res.status(200).json({ received: true });
+
+  try {
+    if (event.name !== 'transaction.approved') return;
 
     const transaction = event.entity;
     const paiementId = transaction.custom_metadata?.paiement_id;
-    if (!paiementId) return res.status(400).json({ error: 'metadata_manquante' });
+    if (!paiementId) return console.error('Webhook reçu sans paiement_id dans custom_metadata');
 
     const paiement = await db.get('SELECT * FROM paiements WHERE id = ?', [paiementId]);
-    if (!paiement) return res.status(404).json({ error: 'paiement_introuvable' });
+    if (!paiement) return console.error('Paiement introuvable pour webhook :', paiementId);
+    if (paiement.statut === 'confirme') return; // déjà traité (évite les doublons en cas de retry FedaPay)
 
     const locataire = await db.get('SELECT * FROM locataires WHERE id = ?', [paiement.locataire_id]);
     const gestionnaire = await db.get('SELECT * FROM gestionnaires WHERE id = ?', [paiement.gestionnaire_id]);
@@ -355,11 +362,8 @@ app.post('/api/webhook/fedapay', async (req, res) => {
     const paiementMaj = await db.get('SELECT * FROM paiements WHERE id = ?', [paiementId]);
     const recuPath = await genererRecu({ gestionnaire, locataire, paiement: paiementMaj, outputDir: RECUS_DIR });
     await db.run('UPDATE paiements SET recu_path = ? WHERE id = ?', [recuPath, paiementId]);
-
-    res.json({ ok: true });
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'erreur_webhook' });
+    console.error('Erreur traitement webhook (après réponse 200) :', e);
   }
 });
 
